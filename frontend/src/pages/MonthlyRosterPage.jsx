@@ -10,7 +10,7 @@ import {
 } from "@/components/ui/dialog";
 import { exportMonthlyRosterXLSX } from "@/lib/exportXlsx";
 import { SHIFT_COLORS, SHIFT_LABEL, SOC_SHIFTS, L3_SHIFTS, shiftCellClass } from "@/lib/shifts";
-import { Download, RefreshCw, CalendarRange, Shuffle, RotateCcw, Lock, Upload, GripVertical, FileSpreadsheet, CheckCircle2, AlertTriangle } from "lucide-react";
+import { Download, RefreshCw, CalendarRange, Shuffle, RotateCcw, Lock, Upload, GripVertical, FileSpreadsheet, CheckCircle2, AlertTriangle, Save, CircleDot } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import * as XLSX from "xlsx-js-style";
 
@@ -48,12 +48,20 @@ export default function MonthlyRosterPage() {
   const [activeTeam, setActiveTeam] = useState("L1");
   const [dragEmpId, setDragEmpId] = useState(null);
   const [importOpen, setImportOpen] = useState(false);
+  // Inline daily-cell editing (WD/WO/L/Adj/Clear) — mirrors Weekly Editor
+  const [edits, setEdits] = useState({});          // { `${empId}__${date}`: code }
+  const [activeCell, setActiveCell] = useState(null); // { empId, date, x, y }
+  const [savingEdits, setSavingEdits] = useState(false);
+
+  const cellKey = (empId, date) => `${empId}__${date}`;
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const { data } = await api.get(`/roster/monthly?year=${year}&month=${month}`);
       setRoster(data);
+      setEdits({});
+      setActiveCell(null);
     } catch (e) {
       toast.error(formatApiError(e));
     } finally {
@@ -119,6 +127,69 @@ export default function MonthlyRosterPage() {
     }
   }, [canManage, roster, year, month, load]);
 
+  // Effective schedules = backend schedules with unsaved local edits overlaid,
+  // so all counts/coverage/summaries reflect edits live before saving.
+  const effSchedules = useMemo(() => {
+    if (!roster) return {};
+    const base = roster.schedules;
+    const keys = Object.keys(edits);
+    if (keys.length === 0) return base;
+    const out = { ...base };
+    keys.forEach((k) => {
+      const [empId, date] = k.split("__");
+      const sched = out[empId];
+      if (!sched) return;
+      out[empId] = { ...sched, daily_status: { ...sched.daily_status, [date]: edits[k] } };
+    });
+    return out;
+  }, [roster, edits]);
+
+  const dirty = Object.keys(edits).length > 0;
+
+  const handleCellClick = useCallback((empId, date, ev) => {
+    const rect = ev.currentTarget.getBoundingClientRect();
+    setActiveCell({ empId, date, x: rect.left, y: rect.bottom });
+  }, []);
+
+  const setCellCode = useCallback((empId, date, code) => {
+    if (!roster) return;
+    const orig = roster.schedules[empId]?.daily_status?.[date] || "";
+    const key = cellKey(empId, date);
+    setEdits((prev) => {
+      const next = { ...prev };
+      if (code === orig) delete next[key];
+      else next[key] = code;
+      return next;
+    });
+    setActiveCell(null);
+  }, [roster]);
+
+  const onRevertEdits = () => {
+    setEdits({});
+    setActiveCell(null);
+    toast.info("Reverted unsaved changes");
+  };
+
+  const onSaveEdits = async () => {
+    const keys = Object.keys(edits);
+    if (keys.length === 0) { toast.info("Nothing to save"); return; }
+    setSavingEdits(true);
+    try {
+      const entries = keys.map((k) => {
+        const [employee_id, date] = k.split("__");
+        return { employee_id, date, code: edits[k] || "", sub_type: "" };
+      });
+      await api.post("/roster/bulk", { entries });
+      toast.success(`Saved ${entries.length} change${entries.length === 1 ? "" : "s"}`);
+      setEdits({});
+      load();
+    } catch (e) {
+      toast.error(formatApiError(e));
+    } finally {
+      setSavingEdits(false);
+    }
+  };
+
   // Filter employees by active team tab
   const teamEmployees = useMemo(() => {
     if (!roster) return [];
@@ -149,12 +220,12 @@ export default function MonthlyRosterPage() {
     if (!roster) return { WD: 0, WO: 0, L: 0, Adj: 0 };
     const t = { WD: 0, WO: 0, L: 0, Adj: 0 };
     teamEmployees.forEach((emp) => {
-      const sched = roster.schedules[emp.id];
+      const sched = effSchedules[emp.id];
       if (!sched) return;
       Object.values(sched.daily_status).forEach((v) => { if (v in t) t[v]++; });
     });
     return t;
-  }, [roster, teamEmployees]);
+  }, [roster, teamEmployees, effSchedules]);
 
   // Per-shift summaries for active team
   const shiftSummaries = useMemo(() => {
@@ -165,7 +236,7 @@ export default function MonthlyRosterPage() {
       const dailyCoverage = roster.dates.map(() => 0);
       let manDays = 0, leaves = 0;
       emps.forEach((emp) => {
-        const sched = roster.schedules[emp.id];
+        const sched = effSchedules[emp.id];
         if (!sched) return;
         roster.dates.forEach((d, i) => {
           const v = sched.daily_status[d];
@@ -183,7 +254,7 @@ export default function MonthlyRosterPage() {
       };
     });
     return result;
-  }, [roster, grouped, visibleShifts]);
+  }, [roster, grouped, visibleShifts, effSchedules]);
 
   const TEAM_TABS = ["L1", "L2", "L3"];
 
@@ -211,11 +282,44 @@ export default function MonthlyRosterPage() {
                 Default
               </span>
             )}
+            {dirty && (
+              <span
+                className="ml-2 inline-flex items-center gap-1.5 px-2 h-6 text-[10px] font-semibold uppercase tracking-wider bg-[#FFB600]/15 text-[#996d00] border border-[#FFB600]/40"
+                data-testid="monthly-unsaved-badge"
+              >
+                <CircleDot className="w-2.5 h-2.5" /> Unsaved
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             {canManage && (
               <>
+                {dirty && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={onRevertEdits}
+                      className="rounded-none border-[var(--border)] h-9 text-xs"
+                      data-testid="monthly-edit-revert"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                      Revert
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={onSaveEdits}
+                      disabled={savingEdits}
+                      className="rounded-none h-9 text-xs bg-black text-white hover:bg-[var(--brand-primary)] font-semibold disabled:opacity-40"
+                      data-testid="monthly-edit-save"
+                    >
+                      <Save className="w-3.5 h-3.5 mr-1.5" />
+                      {savingEdits ? "Saving…" : "Save Changes"}
+                    </Button>
+                    <div className="w-px h-6 bg-[var(--border)] mx-1" />
+                  </>
+                )}
                 <Button
                   variant="outline"
                   size="sm"
@@ -248,7 +352,7 @@ export default function MonthlyRosterPage() {
                     title="Revert to default employee assignments"
                   >
                     <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-                    Revert
+                    Reset Shifts
                   </Button>
                 )}
               </>
@@ -439,7 +543,7 @@ export default function MonthlyRosterPage() {
                 key={sc}
                 shiftCode={sc}
                 employees={emps || []}
-                schedules={roster.schedules}
+                schedules={effSchedules}
                 dates={roster.dates}
                 shiftConfig={shiftConfig}
                 coverageTarget={TEAM_COVERAGE_TARGETS[activeTeam]?.[sc]}
@@ -448,6 +552,8 @@ export default function MonthlyRosterPage() {
                 dragEmpId={dragEmpId}
                 setDragEmpId={setDragEmpId}
                 onDropEmployee={moveEmployeeToShift}
+                onCellClick={canManage ? handleCellClick : null}
+                activeCellKey={activeCell ? cellKey(activeCell.empId, activeCell.date) : null}
               />
             );
           })}
@@ -455,7 +561,7 @@ export default function MonthlyRosterPage() {
             <ShiftSection
               shiftCode=""
               employees={grouped[""]}
-              schedules={roster.schedules}
+              schedules={effSchedules}
               dates={roster.dates}
               shiftConfig={shiftConfig}
               coverageTarget={null}
@@ -464,6 +570,8 @@ export default function MonthlyRosterPage() {
               dragEmpId={dragEmpId}
               setDragEmpId={setDragEmpId}
               onDropEmployee={moveEmployeeToShift}
+              onCellClick={canManage ? handleCellClick : null}
+              activeCellKey={activeCell ? cellKey(activeCell.empId, activeCell.date) : null}
             />
           )}
         </div>
@@ -484,10 +592,20 @@ export default function MonthlyRosterPage() {
         </span>
         {canManage && (
           <span className="text-[var(--brand-primary)] ml-4 font-semibold">
-            Tip: Drag an employee row between shift sections to reassign them for {MONTHS[month - 1]} {year}.
+            Tip: Click any day cell to set WD / WO / L / Adj (or Clear), then Save. Drag a row between shift sections to reassign for {MONTHS[month - 1]} {year}.
           </span>
         )}
       </div>
+
+      {activeCell && canManage && (
+        <MonthlyCellEditor
+          x={activeCell.x}
+          y={activeCell.y}
+          current={edits[cellKey(activeCell.empId, activeCell.date)] ?? (roster?.schedules?.[activeCell.empId]?.daily_status?.[activeCell.date] || "")}
+          onPick={(code) => setCellCode(activeCell.empId, activeCell.date, code)}
+          onClose={() => setActiveCell(null)}
+        />
+      )}
 
       <ImportShiftsDialog
         open={importOpen}
@@ -504,6 +622,7 @@ export default function MonthlyRosterPage() {
 function ShiftSection({
   shiftCode, employees, schedules, dates, shiftConfig, coverageTarget,
   canManage, activeTeam, dragEmpId, setDragEmpId, onDropEmployee,
+  onCellClick, activeCellKey,
 }) {
   const shift = shiftConfig?.[shiftCode];
   const isUnassigned = !shift;
@@ -636,13 +755,29 @@ function ShiftSection({
                   {dates.map((d) => {
                     const v = daily[d] || "";
                     const wkn = isWeekendIso(d);
+                    const key = `${emp.id}__${d}`;
+                    const isActive = activeCellKey === key;
                     return (
                       <td
                         key={d}
                         className={`px-0 py-0 text-center border-r border-[var(--border)] ${shiftCellClass(v)} ${wkn && !v ? "bg-[var(--shift-weekend)]" : ""}`}
                         data-testid={`monthly-cell-${emp.emp_id}-${d}`}
                       >
-                        <span className="block h-7 leading-7 text-[10px] font-bold">{v}</span>
+                        {onCellClick ? (
+                          <button
+                            type="button"
+                            draggable={false}
+                            onMouseDown={(ev) => ev.stopPropagation()}
+                            onClick={(ev) => { ev.stopPropagation(); onCellClick(emp.id, d, ev); }}
+                            className={`block w-full h-7 leading-7 text-[10px] font-bold cursor-pointer hover:ring-2 hover:ring-inset hover:ring-black/40 transition-shadow ${isActive ? "ring-2 ring-inset ring-black" : ""}`}
+                            data-testid={`monthly-cell-btn-${emp.emp_id}-${d}`}
+                            title="Click to set WD / WO / L / Adj"
+                          >
+                            {v || <span className="text-black/20">·</span>}
+                          </button>
+                        ) : (
+                          <span className="block h-7 leading-7 text-[10px] font-bold">{v}</span>
+                        )}
                       </td>
                     );
                   })}
@@ -686,6 +821,56 @@ function ShiftSection({
       </div>
       )}
     </div>
+  );
+}
+
+function MonthlyCellEditor({ x, y, current, onPick, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const left = Math.max(8, Math.min(x, window.innerWidth - 184));
+  const top = Math.min(y + 4, window.innerHeight - 150);
+  const OPTS = ["WD", "WO", "L", "Adj"];
+
+  return (
+    <>
+      <div className="fixed inset-0 z-40" onClick={onClose} data-testid="monthly-cell-editor-backdrop" />
+      <div
+        className="fixed z-50 w-[172px] bg-white border border-black shadow-xl p-2"
+        style={{ left, top }}
+        onClick={(e) => e.stopPropagation()}
+        data-testid="monthly-cell-editor"
+      >
+        <div className="grid grid-cols-2 gap-1.5 mb-1.5">
+          {OPTS.map((code) => {
+            const active = current === code;
+            return (
+              <button
+                key={code}
+                type="button"
+                onClick={() => onPick(code)}
+                data-testid={`monthly-shift-opt-${code}`}
+                className={`h-9 text-[11px] font-bold border border-black/20 transition-all ${active ? "ring-2 ring-black ring-offset-1" : "hover:border-black"}`}
+                style={{ background: SHIFT_COLORS[code], color: "#111" }}
+              >
+                {code}
+              </button>
+            );
+          })}
+        </div>
+        <button
+          type="button"
+          onClick={() => onPick("")}
+          data-testid="monthly-shift-opt-clear"
+          className="w-full h-8 text-[10px] uppercase tracking-[0.15em] font-semibold border border-black/20 hover:bg-black hover:text-white"
+        >
+          Clear
+        </button>
+      </div>
+    </>
   );
 }
 

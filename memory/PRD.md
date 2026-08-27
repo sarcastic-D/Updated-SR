@@ -67,3 +67,8 @@ Subsequent: Fix monthly roster always producing the same schedule, and add a 3-r
 
 ## Preview Fix (Aug 2026)
 - Committed resolutions pinned webpack-dev-server to 5.2.4, breaking react-scripts 5.0.1 dev server. Changed that single resolution to 4.15.2 (config-only, no app source). Live preview now boots and UI login verified end-to-end. Production build unaffected.
+
+## Feature: Inline Monthly Roster cell editing (Aug 2026)
+- Added WD/WO/L/Adj/Clear inline editing to Monthly Roster day cells (admin/manager), mirroring the Weekly Editor. Click a cell → popover → pick code; live-updates counts/coverage/totals via an effSchedules overlay; Unsaved badge + Save Changes/Revert. Save posts to existing POST /api/roster/bulk; compute_monthly_roster overlays db.roster into the monthly view. No backend changes.
+- Renamed snapshot "Revert" button to "Reset Shifts" to disambiguate from edit "Revert".
+- Tested: backend 12/12, frontend 11/11 (persists across reload). Known narrow edge case: cells already L/Adj from an APPROVED leave request won't accept a grid override (compute overlay preserves approved leaves) — left as-is by design.

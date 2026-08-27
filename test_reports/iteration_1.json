@@ -1,0 +1,39 @@
+{
+  "summary": "Tested the new Monthly Roster inline day-cell editing feature (WD/WO/L/Adj/Clear) end-to-end. Backend: 12/12 pytest cases pass (auth, GET /api/roster/monthly structure + overlay, POST /api/roster/bulk set/clear/validation/auth, monthly assign roundtrip). Frontend (Playwright, admin@roster.app, Aug 2026, L1 tab): cell buttons render, popover editor opens with WD/WO/L/Adj + Clear, code selection updates the cell + row WD/L/Adj counts + top totals strip + shift summary cards live, Unsaved badge appears, Revert discards, Save Changes persists (verified after Refresh AND full page reload), Clear removes the override, Escape/outside-click close the popover, multi-cell edits batch-save correctly. Regressions verified: drag-to-reassign row between shift sections, Refresh, month/year selectors, This Month, Reshuffle Month all still work. No blocking bugs found.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/roster/bulk", "issue": "No validation that employee_id exists — a bogus employee_id is accepted and stored in db.roster (returns saved:1), creating orphan rows. Harmless in the monthly view (filtered out) but leaves garbage data."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Monthly cell edit on a cell that is L/Adj from an APPROVED leave request", "issue": "NOT REPRODUCED IN UI (no approved leave in Aug 2026 demo data) but confirmed in code: compute_monthly_roster (server.py ~line 657) skips overlaying db.roster entries when the computed status is already 'L' or 'Adj'. So an admin can set such a cell to WD/WO in the monthly editor, get a 'Saved 1 change' success toast, and the value silently reverts to L/Adj on reload. Needs either a disabled cell + tooltip, or a warning in the save response.", "affected_selectors": ["monthly-cell-btn-*", "monthly-edit-save"]},
+      {"flow": "Change month/year with unsaved edits", "issue": "load() silently wipes `edits` when month/year changes — unsaved cell edits are lost with no confirmation and the Unsaved badge just disappears.", "affected_selectors": ["month-select", "year-select", "monthly-unsaved-badge"]}
+    ],
+    "design_issues": [
+      {"screen": "Monthly Roster toolbar", "issues": ["Two different buttons are both labelled 'Revert' at the same time when edits are dirty: monthly-edit-revert (discard unsaved cell edits) and monthly-clear-snapshot-button (delete the month snapshot / revert shift assignments). Rename one (e.g. 'Discard Edits' vs 'Reset Assignments') to avoid a destructive mis-click.", "'Clear' semantics are ambiguous: locally the cell renders blank, but after Save the cell returns to the computed default (e.g. WD) because the override row is deleted. Consider labelling it 'Reset to default'.", "The cell editor popover opens over the row(s) below (expected for a popover) but there is no arrow/anchor indicator tying it to the edited cell; the edited cell's black ring is the only cue."]}
+    ]
+  },
+  "test_report_links": ["/app/backend/tests/backend_test.py", "/app/test_reports/pytest/pytest_results.xml"],
+  "action_items": [
+    "Decide behaviour for approved-leave cells in the monthly editor (disable + tooltip, or backend should report skipped entries and frontend should surface a warning instead of a plain success toast).",
+    "Rename one of the two 'Revert' buttons to remove ambiguity.",
+    "Optional: warn/confirm before discarding unsaved edits on month/year change.",
+    "Optional: validate employee_id existence in POST /api/roster/bulk to avoid orphan roster rows."
+  ],
+  "critical_code_review_comments": [
+    "MonthlyRosterPage.jsx is 1094 lines — split MonthlyCellEditor, ShiftSection and ImportShiftsDialog into separate files (>700-line guideline).",
+    "compute_monthly_roster silently drops db.roster overrides over L/Adj cells; POST /api/roster/bulk should return which entries will not take effect so the UI can inform the user.",
+    "Frontend save path is correct (single batched POST /api/roster/bulk, then reload) and edits overlay memo keeps counts/coverage consistent — no issues found there."
+  ],
+  "updated_files": ["/app/backend/tests/backend_test.py"],
+  "success_rate": {"backend": "100% (12/12)", "frontend": "100% of tested flows (11/11 checks)"},
+  "seed_data_creation": "No new seed data. Edits made on demo employees E001 (Aug 2026) were all reverted/cleared back to computed defaults. NOTE: the 'Reshuffle Month' regression check at the end of testing did re-randomise Aug 2026 shift/weekoff assignments for the 4 demo L1 employees (intended behaviour of that button).",
+  "should_call_test_agent_after_fix": false,
+  "should_main_agent_self_test": true,
+  "test_credentials": "admin@roster.app / Admin@2026 (from /app/memory/test_credentials.md)",
+  "context_for_next_testing_agent": "Backend regression suite at /app/backend/tests/backend_test.py (pytest, uses REACT_APP_BACKEND_URL from /app/frontend/.env, targets Aug 2026, self-cleans overrides). Feature works fully; the only open items are UX/edge-case (approved-leave cell override silently ignored, duplicate 'Revert' labels, unsaved edits lost on month change). Aug 2026 L1 has 4 demo employees E001-E004 — use data-testid monthly-cell-btn-E001-2026-08-XX. Note Playwright cannot click monthly-cell-editor-backdrop directly (popover intercepts the viewport-centre click); use page.mouse.click on a far coordinate or Escape instead.",
+  "rca_of_the_issue": "No functional defect in the new feature. The one latent bug is in backend compute_monthly_roster: `if current in ('L','Adj'): continue` prevents weekly/monthly per-day overrides from applying on top of approved-leave-derived statuses, so such an edit saves to db.roster but never appears, while the UI reports success."
+}
