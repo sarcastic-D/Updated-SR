@@ -64,3 +64,6 @@ Subsequent: Fix monthly roster always producing the same schedule, and add a 3-r
 - Env set: backend JWT_SECRET (required, >=32 chars), CORS_ORIGINS (frontend origin + localhost), ADMIN_EMAIL/ADMIN_PASSWORD; Mongo via MONGO_URL/DB_NAME (Emergent managed). Frontend REACT_APP_BACKEND_URL unchanged.
 - Verified: backend /api responds, admin login works, Mongo read/write OK, frontend production build (`yarn build`) succeeds → deployable as-is.
 - Known (non-blocking) note: repo ships no lockfile; fresh install resolves webpack-dev-server@5.2.4 which breaks the in-workspace dev preview (`craco start`) via react-scripts 5.0.1's onAfterSetupMiddleware. Does NOT affect the deployed static build. Left unchanged per user instruction.
+
+## Preview Fix (Aug 2026)
+- Committed resolutions pinned webpack-dev-server to 5.2.4, breaking react-scripts 5.0.1 dev server. Changed that single resolution to 4.15.2 (config-only, no app source). Live preview now boots and UI login verified end-to-end. Production build unaffected.
