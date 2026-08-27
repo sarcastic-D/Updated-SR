@@ -1,0 +1,120 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+    --bg: #FFFFFF;
+    --fg: #0F172A;
+    --surface: #F8FAFC;
+    --surface-2: #F1F5F9;
+    --border: #E2E8F0;
+    --border-strong: #0F172A;
+    --muted: #64748B;
+
+    /* SOC brand accents (from reference Excel header palette) */
+    --brand-primary: #305496;   /* deep navy — section banners */
+    --brand-accent:  #4472C4;   /* mid blue — interactive header */
+    --secops-tint:   #FFE699;   /* SecOps row highlight */
+
+    /* Pastel shift palette (matches roster.py) */
+    --shift-wd:  #C6EFCE;
+    --shift-wo:  #FFF2CC;
+    --shift-l:   #F4CCCC;
+    --shift-adj: #BDD7EE;
+    --shift-weekend: #FCE4D6;
+}
+
+html, body, #root {
+    background: var(--bg);
+    color: var(--fg);
+}
+
+body {
+    margin: 0;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv11', 'ss01';
+}
+
+::selection { background: var(--brand-accent); color: #fff; }
+
+.font-display { font-family: 'Outfit', sans-serif; letter-spacing: -0.02em; }
+.font-mono-plex { font-family: 'IBM Plex Mono', monospace; }
+
+.label-eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+.border-hairline { border: 1px solid var(--border); }
+.border-strong { border: 1px solid var(--border-strong); }
+
+/* Shift cell colours (pastel) */
+.shift-cell { transition: transform 0.12s ease, box-shadow 0.12s ease; }
+.shift-cell:hover {
+    box-shadow: inset 0 0 0 2px var(--border-strong);
+    z-index: 1;
+}
+
+.shift-wd  { background: var(--shift-wd);  color: #1B5E20; }
+.shift-wo  { background: var(--shift-wo);  color: #6D4C00; }
+.shift-l   { background: var(--shift-l);   color: #B71C1C; }
+.shift-adj { background: var(--shift-adj); color: #0D47A1; }
+.shift-empty { background: #FFFFFF; color: #94A3B8; }
+
+/* Subtle grid backdrop for landing/identity panels */
+.grid-backdrop {
+    background-image:
+        linear-gradient(var(--border) 1px, transparent 1px),
+        linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: -1px -1px;
+}
+
+@keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.anim-fade-up { animation: fadeUp 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@layer base {
+    :root {
+        --background: 0 0% 100%;
+        --foreground: 222 47% 11%;
+        --card: 0 0% 100%;
+        --card-foreground: 222 47% 11%;
+        --popover: 0 0% 100%;
+        --popover-foreground: 222 47% 11%;
+        --primary: 218 50% 39%;          /* brand-primary navy */
+        --primary-foreground: 0 0% 100%;
+        --secondary: 210 40% 96.1%;
+        --secondary-foreground: 222 47% 11%;
+        --muted: 210 40% 96.1%;
+        --muted-foreground: 215 16% 47%;
+        --accent: 210 40% 96.1%;
+        --accent-foreground: 222 47% 11%;
+        --destructive: 0 79% 48%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 214 32% 91%;
+        --input: 214 32% 91%;
+        --ring: 218 50% 39%;
+        --radius: 0.375rem;
+    }
+}
+
+@layer base {
+    * { @apply border-border; }
+    body { @apply bg-background text-foreground; }
+}
+
+::-webkit-scrollbar { height: 10px; width: 10px; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 2px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+::-webkit-scrollbar-track { background: transparent; }
